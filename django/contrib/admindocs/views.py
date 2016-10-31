@@ -11,6 +11,7 @@ from django.contrib.admindocs import utils
 from django.core.exceptions import ImproperlyConfigured, ViewDoesNotExist
 from django.db import models
 from django.http import Http404
+from django.template import engines
 from django.template.engine import Engine
 from django.template.loaders.cached import Loader as Cached_Loader
 from django.template.loaders.filesystem import Loader
@@ -349,19 +350,28 @@ class TemplateDetailView(BaseAdminDocsView):
     def get_context_data(self, **kwargs):
         template = self.kwargs['template']
         templates = []
+        directories = set()
         try:
             default_engine = Engine.get_default()
         except ImproperlyConfigured:
             # Non-trivial TEMPLATES settings aren't supported (#24125).
-            pass
+            for backend in engines.all():
+                directories.update(backend.engine.dirs)
+                for loader in backend.engine.template_loaders:
+                    if isinstance(loader, Loader):
+                        directories.update(loader.get_dirs())
+                    elif isinstance(loader, Cached_Loader):
+                        for cached_loader in loader.loaders:
+                            directories.update(cached_loader.get_dirs())
         else:
-            directories = set(default_engine.dirs)
+            directories.update(default_engine.dirs)
             for loader in default_engine.template_loaders:
                 if isinstance(loader, Loader):
                     directories.update(loader.get_dirs())
                 elif isinstance(loader, Cached_Loader):
                     for cached_loader in loader.loaders:
                         directories.update(cached_loader.get_dirs())
+        finally:
             for index, directory in enumerate(directories):
                 template_file = os.path.join(directory, template)
                 if os.path.exists(template_file):
